@@ -6,8 +6,8 @@ from docx import Document
 from docx.text.paragraph import Paragraph
 from docx.table import Table, _Cell  # ← 新增 _Cell
 
-import docx_utils as du  # Word 操作函数集合
-
+# import docx_utils as du  # Word 操作函数集合
+import docx_utils as du
 
 # --------------------------  LLMConfig  -------------------------- #
 class LLMConfig:
@@ -141,6 +141,22 @@ class LLMWordAgent:
             if p.annotation is Document or p.name == "doc":
                 kwargs[p.name] = doc
 
+        # -------- 特殊处理 set_cell_text 的 row/col 参数 -------- #
+        if action == "set_cell_text" and "row" in kwargs and "col" in kwargs:
+            # 从 row/col 构造 cell 参数
+            row = kwargs.pop("row")
+            col = kwargs.pop("col")
+            table_index = kwargs.pop("table_index", None)
+            
+            if table_index is not None:
+                table = doc.tables[table_index]
+            elif self.runtime_ctx.get("last_table"):
+                table = self.runtime_ctx["last_table"]
+            else:
+                raise ValueError("无法确定表格：缺少 table_index 且没有最近创建的表格")
+            
+            kwargs["cell"] = table.cell(row, col)
+
         # -------- 将 index / dict 转对象 -------- #
         def to_para(v):
             if isinstance(v, int):
@@ -258,7 +274,7 @@ if __name__ == "__main__":
     """
     import os
 
-    os.environ["OPENAI_API_KEY"] = "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"
+    os.environ["OPENAI_API_KEY"] = "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"
 
     cfg = LLMConfig(
         api_key=os.getenv("OPENAI_API_KEY"),
@@ -289,7 +305,7 @@ if __name__ == "__main__":
     # 11) 设置文档作者属性为 “LLM-Agent”。
     # 12) 把所有的文字替换成英文翻译，你（大模型）提供翻译
     # """
-
+    #
     # user_inst = """
     # Please read the existing contract text in the current document and replace each occurrence of the old contract elements listed below with the corresponding new values. Do not modify any other clauses, numbering, or formatting—only perform precise text substitutions. Return **only** a JSON array of `docx_utils` commands.
     #
@@ -309,7 +325,7 @@ if __name__ == "__main__":
     #     out_path="demo_out.docx",
     # )
     # print(json.dumps(res, ensure_ascii=False, indent=2))
-
+    #
     # user_inst = """
     # Please read the existing legal text in the current document and replace each occurrence of the old contract elements listed below with the corresponding new values. Do not modify any other clauses, numbering, or formatting—only perform precise text substitutions. Return **only** a JSON array of `docx_utils` commands.
     #
@@ -328,37 +344,38 @@ if __name__ == "__main__":
     user_inst = """
     写一个 陈致晖 AI 算法实习的交接文档
     交接包括两部分的技术
-    
+
     dify 的新推理 发布在了tag news ollama， 使用ollama + qwen3 8/32b 模型推理，主要的prompt修改在：
     添加而输出结构限制：
-    
+
     DO NOT include anything not the direct answer. Only output direct answer.
-    
+
     direct answer (do not include this):
-    
+
     同时在输出端剔除思考模型的<think/> </think> 思考内容，示例代码
     if '<think>' in company and '</think>' in company:
         # 找到</think>后的内容，通常是"Direct Answer:"或直接是答案
         think_end = company.find('</think>')
         answer_part = company[think_end + 8:].strip()  # 8是'</think>'的长度
-        
+
         company = answer_part
-    
+
     同时调整prompt规范模型输出格式
-    
-    
+
+
      gitlab 上 AI News Evaluation 加了 tag_news_ollama 的branch，更新了代码
      测试代码修改了api，可以直接运行发布了的dify tag news ollama 的测试
-     
-     
+
+
      后续微调工作：写清楚 推荐使用verl 字节火山架构做 llm 强化学习，架构代码位于服务器/home/aqumon/ai_news/local_llm_finetune，架构环境配置于conda/verl                   /home/aqumon/anaconda3/envs/verl
      随后附上你（大模型）生成的适合算法交接的verl 使用简短说明
-     
+
      后续微调工作推荐的策略：选用8B模型，配合1-2k标好的数据，使用grpo强化学习，reward设置为标签的正确数量，基于verl进行微调，学习人类的标签偏好
-     
+
      最后结束
-     
+
      以上所有的文字需要你进行拓展，组织，生成一个有各级标题的交接文档, 
+     最后把全部更新后的字体全部改为宋体
 
     """
 
@@ -368,7 +385,7 @@ if __name__ == "__main__":
         out_path="documents/AQUMON_out.docx",
     )
     print(json.dumps(res, ensure_ascii=False, indent=2))
-
+    #
 
     # 已经发现的bug
     # 1. 原本的docx 不能是空的否则无法读取

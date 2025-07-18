@@ -91,31 +91,134 @@ def add_page_break(doc: Document):
 def add_list(doc: Document, items: List[str], ordered: bool = False):
     print(f"[docx_utils] add_list(items={items}, ordered={ordered}) called")
     """添加有序/无序列表"""
-    style = 'List Number' if ordered else 'List Bullet'
-    for item in items:
-        doc.add_paragraph(item, style=style)
+    for i, item in enumerate(items, 1):
+        if ordered:
+            # 有序列表：手动添加数字前缀
+            list_text = f"{i}. {item}"
+        else:
+            # 无序列表：手动添加项目符号
+            list_text = f"• {item}"
+        
+        para = doc.add_paragraph(list_text)
+        # 设置段落缩进以模拟列表效果
+        para.paragraph_format.left_indent = Pt(18)  # 左缩进
+        para.paragraph_format.first_line_indent = Pt(-18)  # 首行悬挂缩进
 
 # =====================
 # 字体与样式
 # =====================
+def normalize_font_name(font_name: str) -> str:
+    """
+    标准化字体名称，用于模糊匹配
+    """
+    return font_name.lower().replace(" ", "").replace("-", "").replace("_", "")
+
+def find_best_font_match(requested_font: str) -> str:
+    """
+    查找最佳匹配的字体名称
+    支持模糊匹配常见字体名称
+    """
+    # 常见字体映射表
+    font_mappings = {
+        # Times 系列
+        "times": "Times New Roman",
+        "timesnewroman": "Times New Roman",
+        "timesroman": "Times New Roman",
+        "times-roman": "Times New Roman",
+        
+        # Arial 系列
+        "arial": "Arial",
+        "arialnormal": "Arial",
+        "arial-normal": "Arial",
+        
+        # Calibri 系列
+        "calibri": "Calibri",
+        "calibrinormal": "Calibri",
+        
+        # 宋体系列
+        "simsun": "SimSun",
+        "宋体": "SimSun",
+        "songti": "SimSun",
+        "sim-sun": "SimSun",
+        
+        # 黑体系列
+        "simhei": "SimHei",
+        "黑体": "SimHei",
+        "heiti": "SimHei",
+        "sim-hei": "SimHei",
+        
+        # 微软雅黑系列
+        "microsoftyahei": "Microsoft YaHei",
+        "yahei": "Microsoft YaHei",
+        "雅黑": "Microsoft YaHei",
+        "微软雅黑": "Microsoft YaHei",
+        "msyh": "Microsoft YaHei",
+        
+        # 楷体系列
+        "kaiti": "KaiTi",
+        "楷体": "KaiTi",
+        "kai-ti": "KaiTi",
+        
+        # Helvetica 系列
+        "helvetica": "Helvetica",
+        "helveticanormal": "Helvetica",
+        
+        # Georgia 系列
+        "georgia": "Georgia",
+        "georgianormal": "Georgia",
+        
+        # Verdana 系列
+        "verdana": "Verdana",
+        "verdananormal": "Verdana",
+    }
+    
+    # 标准化输入字体名称
+    normalized_requested = normalize_font_name(requested_font)
+    
+    # 直接匹配
+    if normalized_requested in font_mappings:
+        matched_font = font_mappings[normalized_requested]
+        print(f"[DEBUG] Font '{requested_font}' matched to '{matched_font}'")
+        return matched_font
+    
+    # 部分匹配
+    for key, value in font_mappings.items():
+        if normalized_requested in key or key in normalized_requested:
+            print(f"[DEBUG] Font '{requested_font}' partially matched to '{value}'")
+            return value
+    
+    # 如果没有匹配，返回原字体名称
+    print(f"[DEBUG] Font '{requested_font}' not matched, using original name")
+    return requested_font
+
 def set_run_style(run, font_name=None, font_size=None, bold=None, italic=None, underline=None, color=None):
     print(f"[docx_utils] set_run_style(font_name={font_name}, font_size={font_size}, bold={bold}, italic={italic}, underline={underline}, color={color}) called")
     """设置 run 的字体、字号、加粗、斜体、下划线、颜色"""
-    font = run.font
-    if font_name:
-        font.name = font_name
-    if font_size:
-        font.size = Pt(font_size)
-    if bold is not None:
-        font.bold = bold
-    if italic is not None:
-        font.italic = italic
-    if underline is not None:
-        font.underline = underline
-    if color:
-        if isinstance(color, str) and color.startswith('#'):
-            color = RGBColor.from_string(color[1:])
-        font.color.rgb = color
+    try:
+        font = run.font
+        if font_name:
+            # 使用模糊匹配查找最佳字体
+            matched_font = find_best_font_match(font_name)
+            font.name = matched_font
+            # 设置字体族，确保兼容性
+            font._element.set('{http://schemas.openxmlformats.org/wordprocessingml/2006/main}ascii', matched_font)
+            font._element.set('{http://schemas.openxmlformats.org/wordprocessingml/2006/main}eastAsia', matched_font)
+            font._element.set('{http://schemas.openxmlformats.org/wordprocessingml/2006/main}hAnsi', matched_font)
+            font._element.set('{http://schemas.openxmlformats.org/wordprocessingml/2006/main}cs', matched_font)
+        if font_size:
+            font.size = Pt(font_size)
+        if bold is not None:
+            font.bold = bold
+        if italic is not None:
+            font.italic = italic
+        if underline is not None:
+            font.underline = underline
+        if color:
+            if isinstance(color, str) and color.startswith('#'):
+                color = RGBColor.from_string(color[1:])
+            font.color.rgb = color
+    except Exception as e:
+        print(f"[ERROR] Failed to set run style: {e}")
 
 def set_paragraph_style(paragraph, alignment=None, line_spacing=None, indent=None):
     print(f"[docx_utils] set_paragraph_style(alignment={alignment}, line_spacing={line_spacing}, indent={indent}) called")
@@ -126,6 +229,191 @@ def set_paragraph_style(paragraph, alignment=None, line_spacing=None, indent=Non
         paragraph.paragraph_format.line_spacing = line_spacing
     if indent:
         paragraph.paragraph_format.first_line_indent = Pt(indent)
+
+def change_font_comprehensive(doc: Document, font_name: str, target_type: str = "all", target_indices: list = None):
+    """
+    全面的字体更改功能，支持局部和全局变更
+    
+    参数:
+        doc: Document对象
+        font_name: 字体名称（支持模糊匹配）
+        target_type: 目标类型 - "all"(全部), "paragraphs"(段落), "tables"(表格), "headers"(页眉), "footers"(页脚)
+        target_indices: 目标索引列表，仅在target_type不为"all"时生效
+    """
+    print(f"[docx_utils] change_font_comprehensive(font_name={font_name}, target_type={target_type}, target_indices={target_indices}) called")
+    
+    # 使用模糊匹配查找最佳字体
+    matched_font = find_best_font_match(font_name)
+    changed_count = 0
+    
+    def change_runs_font(runs):
+        """更改runs列表中所有run的字体"""
+        nonlocal changed_count
+        for run in runs:
+            try:
+                set_run_style(run, font_name=matched_font)
+                changed_count += 1
+            except Exception as e:
+                print(f"[WARNING] Failed to change font for run: {e}")
+    
+    def change_paragraph_font(paragraph):
+        """更改段落字体"""
+        change_runs_font(paragraph.runs)
+    
+    def change_table_font(table):
+        """更改表格字体"""
+        for row in table.rows:
+            for cell in row.cells:
+                for para in cell.paragraphs:
+                    change_runs_font(para.runs)
+    
+    # 根据target_type执行不同的字体更改策略
+    if target_type == "all":
+        # 全局更改：遍历所有可能的文本元素
+        
+        # 1. 主文档段落
+        for para in doc.paragraphs:
+            change_paragraph_font(para)
+        
+        # 2. 主文档表格
+        for table in doc.tables:
+            change_table_font(table)
+        
+        # 3. 页眉页脚
+        try:
+            for section in doc.sections:
+                # 页眉
+                if section.header:
+                    for para in section.header.paragraphs:
+                        change_paragraph_font(para)
+                    for table in section.header.tables:
+                        change_table_font(table)
+                
+                # 页脚
+                if section.footer:
+                    for para in section.footer.paragraphs:
+                        change_paragraph_font(para)
+                    for table in section.footer.tables:
+                        change_table_font(table)
+        except Exception as e:
+            print(f"[WARNING] Could not change header/footer font: {e}")
+        
+        # 4. 使用更深层的XML遍历确保不遗漏
+        try:
+            from docx.oxml.ns import qn
+            # 遍历所有文本运行元素
+            for element in doc.element.iter():
+                if element.tag == qn('w:r'):  # 文本运行元素
+                    try:
+                        # 获取或创建字体属性
+                        rPr = element.find(qn('w:rPr'))
+                        if rPr is None:
+                            rPr = element.makeelement(qn('w:rPr'))
+                            element.insert(0, rPr)
+                        
+                        # 设置字体
+                        fonts = rPr.find(qn('w:rFonts'))
+                        if fonts is None:
+                            fonts = rPr.makeelement(qn('w:rFonts'))
+                            rPr.append(fonts)
+                        
+                        fonts.set(qn('w:ascii'), matched_font)
+                        fonts.set(qn('w:eastAsia'), matched_font)
+                        fonts.set(qn('w:hAnsi'), matched_font)
+                        fonts.set(qn('w:cs'), matched_font)
+                        
+                    except Exception as e:
+                        print(f"[WARNING] XML-level font change failed: {e}")
+        except Exception as e:
+            print(f"[WARNING] Deep XML traversal failed: {e}")
+    
+    elif target_type == "paragraphs":
+        # 段落字体更改
+        paragraphs = doc.paragraphs
+        if target_indices:
+            for idx in target_indices:
+                if 0 <= idx < len(paragraphs):
+                    change_paragraph_font(paragraphs[idx])
+        else:
+            for para in paragraphs:
+                change_paragraph_font(para)
+    
+    elif target_type == "tables":
+        # 表格字体更改
+        tables = doc.tables
+        if target_indices:
+            for idx in target_indices:
+                if 0 <= idx < len(tables):
+                    change_table_font(tables[idx])
+        else:
+            for table in tables:
+                change_table_font(table)
+    
+    elif target_type == "headers":
+        # 页眉字体更改
+        try:
+            sections = doc.sections
+            if target_indices:
+                for idx in target_indices:
+                    if 0 <= idx < len(sections) and sections[idx].header:
+                        for para in sections[idx].header.paragraphs:
+                            change_paragraph_font(para)
+                        for table in sections[idx].header.tables:
+                            change_table_font(table)
+            else:
+                for section in sections:
+                    if section.header:
+                        for para in section.header.paragraphs:
+                            change_paragraph_font(para)
+                        for table in section.header.tables:
+                            change_table_font(table)
+        except Exception as e:
+            print(f"[WARNING] Header font change failed: {e}")
+    
+    elif target_type == "footers":
+        # 页脚字体更改
+        try:
+            sections = doc.sections
+            if target_indices:
+                for idx in target_indices:
+                    if 0 <= idx < len(sections) and sections[idx].footer:
+                        for para in sections[idx].footer.paragraphs:
+                            change_paragraph_font(para)
+                        for table in sections[idx].footer.tables:
+                            change_table_font(table)
+            else:
+                for section in sections:
+                    if section.footer:
+                        for para in section.footer.paragraphs:
+                            change_paragraph_font(para)
+                        for table in section.footer.tables:
+                            change_table_font(table)
+        except Exception as e:
+            print(f"[WARNING] Footer font change failed: {e}")
+    
+    print(f"[DEBUG] Changed font to {matched_font} for {changed_count} text runs (target: {target_type})")
+    return changed_count
+
+def change_document_font(doc: Document, font_name: str):
+    """
+    更改整个文档的字体（兼容性函数，调用新的comprehensive函数）
+    """
+    print(f"[docx_utils] change_document_font(font_name={font_name}) called")
+    return change_font_comprehensive(doc, font_name, target_type="all")
+
+def change_paragraph_font(doc: Document, font_name: str, paragraph_indices: list = None):
+    """
+    更改指定段落的字体
+    """
+    print(f"[docx_utils] change_paragraph_font(font_name={font_name}, paragraph_indices={paragraph_indices}) called")
+    return change_font_comprehensive(doc, font_name, target_type="paragraphs", target_indices=paragraph_indices)
+
+def change_table_font(doc: Document, font_name: str, table_indices: list = None):
+    """
+    更改指定表格的字体
+    """
+    print(f"[docx_utils] change_table_font(font_name={font_name}, table_indices={table_indices}) called")
+    return change_font_comprehensive(doc, font_name, target_type="tables", target_indices=table_indices)
 
 # =====================
 # 表格
@@ -227,11 +515,41 @@ def set_section_properties(section, orientation=None, page_width=None, page_heig
         section.left_margin = margin[2]
         section.right_margin = margin[3]
 
+def find_and_replace_text_smart(doc: Document, search_text: str, replace_text: str, nth: Union[int, None] = 1) -> int:
+    """
+    智能文本查找替换，处理跨runs的文本和格式问题
+    """
+    print(f"[docx_utils] find_and_replace_text_smart(search_text={search_text[:50]}..., replace_text={replace_text[:50]}..., nth={nth}) called")
+    
+    total_replaced = 0
+    
+    # 处理段落中的文本
+    for para in doc.paragraphs:
+        if search_text in para.text:
+            replaced = replace_text_preserve_format(para, search_text, replace_text, nth=None if nth is None else nth-total_replaced)
+            total_replaced += replaced
+            if nth is not None and total_replaced >= nth:
+                break
+    
+    # 处理表格中的文本
+    for table in doc.tables:
+        for row in table.rows:
+            for cell in row.cells:
+                for para in cell.paragraphs:
+                    if search_text in para.text:
+                        replaced = replace_text_preserve_format(para, search_text, replace_text, nth=None if nth is None else nth-total_replaced)
+                        total_replaced += replaced
+                        if nth is not None and total_replaced >= nth:
+                            return total_replaced
+    
+    print(f"[DEBUG] Smart replace total: {total_replaced}")
+    return total_replaced
+
 # =====================
 # 高级文本替换（保留格式，见前述实现）
 # =====================
 def replace_text_preserve_format(paragraph, search_text: str, replace_text: str, nth: Union[int, None] = 1) -> int:
-    print(f"[docx_utils] replace_text_preserve_format(search_text={search_text}, replace_text={replace_text}, nth={nth}) called")
+    print(f"[docx_utils] replace_text_preserve_format(search_text={search_text[:50]}..., replace_text={replace_text[:50]}..., nth={nth}) called")
     """
     在段落中查找并替换第 nth 个 search_text，并用 replace_text 替换，最大限度保留原有格式。
     参数：
@@ -244,6 +562,8 @@ def replace_text_preserve_format(paragraph, search_text: str, replace_text: str,
     """
     if not search_text:
         return 0
+    
+    # 构建完整文本和run索引
     full_text = ""
     run_indices = []
     for run in paragraph.runs:
@@ -251,6 +571,13 @@ def replace_text_preserve_format(paragraph, search_text: str, replace_text: str,
         full_text += run.text
         end = len(full_text)
         run_indices.append((run, start, end))
+    
+    # 调试输出
+    print(f"[DEBUG] Paragraph text: {full_text[:100]}...")
+    print(f"[DEBUG] Search text: {search_text[:50]}...")
+    print(f"[DEBUG] Paragraph has {len(paragraph.runs)} runs")
+    
+    # 查找所有匹配位置
     match_positions = []
     idx = 0
     while True:
@@ -259,30 +586,53 @@ def replace_text_preserve_format(paragraph, search_text: str, replace_text: str,
             break
         match_positions.append(idx)
         idx += len(search_text) if len(search_text) > 0 else 1
+    
+    print(f"[DEBUG] Found {len(match_positions)} matches")
+    
     if not match_positions:
         return 0
+    
+    # 根据nth参数选择要替换的位置
     if nth is not None:
         if nth <= 0 or nth > len(match_positions):
             return 0
         match_positions = [match_positions[nth-1]]
+    
     replaced_count = 0
+    # 从后往前替换，避免位置偏移
     for start_pos in reversed(match_positions):
         end_pos = start_pos + len(search_text)
+        
+        # 找到受影响的runs
         affected = []
         for i, (run, s, e) in enumerate(run_indices):
             if s < end_pos and e > start_pos:
                 affected.append((i, run, s, e))
+        
         if not affected:
             continue
+        
+        # 处理替换
         first_i, first_run, first_s, first_e = affected[0]
         last_i, last_run, last_s, last_e = affected[-1]
+        
+        # 计算前缀和后缀
         prefix = first_run.text[:start_pos - first_s] if start_pos > first_s else ""
         suffix = last_run.text[end_pos - last_s:] if end_pos < last_e else ""
+        
+        # 执行替换
         first_run.text = prefix + replace_text + suffix
+        
+        # 清空其他受影响的runs
         for i, run, s, e in affected[1:]:
             run.text = ""
+        
         replaced_count += 1
+        
+        # 更新full_text用于下一次替换
         full_text = "".join(run.text for run, _, _ in run_indices)
+    
+    print(f"[DEBUG] Replaced {replaced_count} instances")
     return replaced_count
 
 def replace_text_in_docx(doc: Document, search_text: str, replace_text: str, nth: Union[int, None] = 1) -> int:
