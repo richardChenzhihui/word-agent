@@ -274,7 +274,7 @@ if __name__ == "__main__":
     """
     import os
 
-    os.environ["OPENAI_API_KEY"] = "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"
+    os.environ["OPENAI_API_KEY"] = 
 
     cfg = LLMConfig(
         api_key=os.getenv("OPENAI_API_KEY"),
